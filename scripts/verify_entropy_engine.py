@@ -69,6 +69,13 @@ def main() -> int:
         if ok_trend:
             print('OK_ENTROPY_TREND_API')
 
+        kpi = client.get('/v1/entropy/kpi?window=24h')
+        kb = kpi.json() if kpi.status_code == 200 else {}
+        ok_kpi = kpi.status_code == 200 and 'avg_score' in kb and 'slo' in kb
+        report['checks']['OK_ENTROPY_KPI_API'] = bool(ok_kpi)
+        if ok_kpi:
+            print('OK_ENTROPY_KPI_API')
+
         m = client.get('/v1/system/monitor')
         mb = m.json() if m.status_code == 200 else {}
         ok_monitor = m.status_code == 200 and isinstance(mb.get('entropy'), dict) and 'score' in mb['entropy']

@@ -241,9 +241,12 @@ async function loadMonitor(){
 
 
 async function loadEntropyOps(){
-  const [t24, t7] = await Promise.all([
+  const [t24, t7, kpi24, kpi7, proposals] = await Promise.all([
     getJSON('/v1/entropy/trend?window=24h&bucket=1h'),
     getJSON('/v1/entropy/trend?window=7d&bucket=1h'),
+    getJSON('/v1/entropy/kpi?window=24h'),
+    getJSON('/v1/entropy/kpi?window=7d'),
+    getJSON('/v1/entropy/proposals?status=PENDING&limit=20'),
   ]);
   $('#monitor-entropy-trend-24h').textContent = fmt(t24.buckets || []);
   const riskDist = {};
@@ -252,6 +255,8 @@ async function loadEntropyOps(){
   }
   $('#monitor-entropy-trend-7d').textContent = fmt({risk_distribution: riskDist, last_state: t7.last_state, last_score: t7.last_score});
   $('#monitor-entropy-transitions').textContent = fmt({transitions_24h: t24.transitions, transitions_7d: t7.transitions, last_state: t7.last_state, last_score: t7.last_score});
+  $('#monitor-kpi-json').textContent = fmt({kpi_24h: kpi24, kpi_7d: kpi7, slo_badge: {A:kpi24.slo?.A||'unknown',B:kpi24.slo?.B||'unknown',C:kpi24.slo?.C||'unknown'}});
+  $('#monitor-proposals-json').textContent = fmt(proposals);
 }
 
 function setMonitorAutoRefresh(){
@@ -448,6 +453,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
   loadEvidence().catch(e=>$('#evidence-index').textContent=e.message);
   $('#refresh-proposals').onclick=()=>loadProposals();
   $('#refresh-monitor').onclick=()=>loadMonitor().catch(e=>$('#monitor-json').textContent=e.message);
+  $('#refresh-entropy-proposals').onclick=()=>loadEntropyOps().catch(e=>$('#monitor-proposals-json').textContent=e.message);
   $('#monitor-refresh-interval').onchange=()=>setMonitorAutoRefresh();
   setMonitorAutoRefresh();
   $('#refresh-gates').onclick=()=>loadOverview().catch(e=>$('#gates-summary').textContent=e.message);

@@ -135,6 +135,11 @@ class MemoryAddReq(BaseModel):
     metadata: dict = Field(default_factory=dict)
 
 
+class ProposalDecisionReq(BaseModel):
+    actor: str = "operator"
+    reason: str | None = None
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 
 @router.get("/health", tags=["system"])
@@ -317,6 +322,94 @@ async def entropy_trend(window: str = Query("24h", pattern="^(24h|7d)$"), bucket
         'last_state': last_state,
         'last_score': last_score,
     }
+
+
+@router.get("/entropy/kpi", tags=["entropy"])
+async def entropy_kpi(window: str = Query("24h", pattern="^(24h|7d)$")):
+    import sqlite3
+    import time
+    from collections import defaultdict
+    from statistics import quantiles
+    from pathlib import Path as _Path
+
+    db_path = _Path(settings.entropy_ops_sqlite_path).resolve()
+    if not db_path.exists():
+        return {
+            'window': window,
+            'avg_score': 0.0,
+            'p95_score': 0.0,
+            'time_in_state': {},
+            'transitions_count': 0,
+            'alert_sent_count': 0,
+            'slo': {'A': 'green', 'B': 'green', 'C': 'green'}
+        }
+
+    span = 24 * 3600 if window == '24h' else 7 * 24 * 3600
+    start = time.time() - span
+
+    con = sqlite3.connect(str(db_path))
+    con.row_factory = sqlite3.Row
+    try:
+        rows = con.execute('SELECT ts,state,score,event,risk FROM entropy_events WHERE ts >= ? ORDER BY ts ASC', (start,)).fetchall()
+        alerts = con.execute('SELECT COUNT(*) AS c FROM entropy_alert_log WHERE ts >= ?', (start,)).fetchone()['c']
+    finally:
+        con.close()
+
+    if not rows:
+        return {'window': window, 'avg_score': 0.0, 'p95_score': 0.0, 'time_in_state': {}, 'transitions_count': 0, 'alert_sent_count': int(alerts), 'slo': {'A': 'green', 'B': 'green', 'C': 'green'}}
+
+    scores = [float(r['score'] or 0.0) for r in rows]
+    avg_score = round(sum(scores) / len(scores), 4)
+    p95_score = round(quantiles(scores, n=20)[-1], 4) if len(scores) >= 2 else round(scores[0], 4)
+
+    time_in_state = defaultdict(float)
+    critical_time = 0.0
+    degraded_critical_transitions = 0
+
+    for i, row in enumerate(rows):
+        ts = float(row['ts'])
+        st = str(row['state'] or 'UNKNOWN')
+        nxt = float(rows[i + 1]['ts']) if i + 1 < len(rows) else time.time()
+        dur = max(0.0, nxt - ts)
+        time_in_state[st] += dur
+        if st == 'CRITICAL':
+            critical_time += dur
+        if st in {'DEGRADED', 'CRITICAL'} and str(row['event']) == 'state_transition':
+            degraded_critical_transitions += 1
+
+    slo_a = 'green' if critical_time < 300 else ('yellow' if critical_time < 900 else 'red')
+    slo_b = 'green' if degraded_critical_transitions < 10 else ('yellow' if degraded_critical_transitions < 20 else 'red')
+    slo_c = 'green' if avg_score < 0.45 else ('yellow' if avg_score < 0.6 else 'red')
+
+    return {
+        'window': window,
+        'avg_score': avg_score,
+        'p95_score': p95_score,
+        'time_in_state': {k: round(v, 3) for k, v in dict(time_in_state).items()},
+        'transitions_count': int(sum(1 for r in rows if str(r['event']) == 'state_transition')),
+        'alert_sent_count': int(alerts),
+        'slo': {'A': slo_a, 'B': slo_b, 'C': slo_c},
+    }
+
+
+@router.get("/entropy/proposals", tags=["entropy"])
+async def entropy_proposals(status: str = Query('PENDING'), limit: int = Query(50, ge=1, le=500)):
+    return {'items': entropy_engine.list_proposals(status=status, limit=limit)}
+
+
+@router.post("/entropy/proposals/{proposal_id}/approve", tags=["entropy"])
+async def entropy_proposal_approve(proposal_id: int, req: ProposalDecisionReq):
+    return entropy_engine.set_proposal_decision(proposal_id=proposal_id, action='approve', actor=req.actor, reason=req.reason)
+
+
+@router.post("/entropy/proposals/{proposal_id}/reject", tags=["entropy"])
+async def entropy_proposal_reject(proposal_id: int, req: ProposalDecisionReq):
+    return entropy_engine.set_proposal_decision(proposal_id=proposal_id, action='reject', actor=req.actor, reason=req.reason)
+
+
+@router.post("/entropy/proposals/{proposal_id}/execute", tags=["entropy"])
+async def entropy_proposal_execute(proposal_id: int, req: ProposalDecisionReq):
+    return entropy_engine.execute_approved_proposal(proposal_id=proposal_id, actor=req.actor)
 
 
 @router.get("/metrics", tags=["system"])

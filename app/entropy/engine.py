@@ -139,6 +139,39 @@ class EntropyEngine:
             )
             con.execute("CREATE INDEX IF NOT EXISTS ix_entropy_events_ts ON entropy_events(ts)")
             con.execute("CREATE INDEX IF NOT EXISTS ix_entropy_events_event ON entropy_events(event)")
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS entropy_proposals (
+                    proposal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_ts REAL NOT NULL,
+                    state TEXT NOT NULL,
+                    risk TEXT NOT NULL,
+                    score REAL NOT NULL,
+                    vector_json TEXT NOT NULL,
+                    action_hint TEXT,
+                    status TEXT NOT NULL,
+                    approved_by TEXT,
+                    approved_ts REAL,
+                    decision_reason TEXT,
+                    executed_action TEXT,
+                    result_json TEXT
+                )
+                """
+            )
+            con.execute("CREATE INDEX IF NOT EXISTS ix_entropy_proposals_status ON entropy_proposals(status)")
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS entropy_alert_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts REAL NOT NULL,
+                    dedup_key TEXT UNIQUE NOT NULL,
+                    risk TEXT,
+                    state TEXT,
+                    score REAL
+                )
+                """
+            )
+            con.execute("CREATE INDEX IF NOT EXISTS ix_entropy_alert_log_ts ON entropy_alert_log(ts)")
             con.commit()
         finally:
             con.close()
@@ -172,6 +205,152 @@ class EntropyEngine:
                 con.close()
         except Exception:
             pass
+
+    def _bucket_start(self, ts: float, seconds: int) -> int:
+        s = max(1, int(seconds))
+        return int(ts // s) * s
+
+    def _top_cause(self, vector: dict[str, float]) -> str:
+        return max(vector.items(), key=lambda kv: kv[1])[0] if vector else "unknown"
+
+    def _action_hint(self, risk: str, actions: list[str]) -> str:
+        if risk == "WARN":
+            return "Observe trend and validate entropy tick cadence."
+        if risk == "DEGRADED":
+            return "Review task backlog/model fallback and apply low-risk stabilizations."
+        if risk == "CRITICAL":
+            return "Prepare controlled recovery plan and governor approval before execution."
+        return "No action needed."
+
+    def _recovery_condition(self) -> str:
+        return "Return to NORMAL or RECOVERY state for 2 consecutive ticks."
+
+    def _runbook_ref(self, risk: str) -> str:
+        return f"docs/ENTROPY_ALERT_RUNBOOK.md#{risk.lower()}"
+
+    def _alert_dedup_key(self, snap: dict[str, Any], now: float) -> str:
+        risk = str(snap.get('risk') or 'NORMAL')
+        state = str(snap.get('state') or 'UNKNOWN')
+        vector = snap.get('vector') or {}
+        top = self._top_cause(vector if isinstance(vector, dict) else {})
+        bucket_start = self._bucket_start(now, max(60, int(getattr(settings, 'entropy_alert_cooldown_s', 300))))
+        raw = f"{state}|{risk}|{bucket_start}|{top}"
+        return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+    def _alert_dedup_exists(self, dedup_key: str, cooldown: int) -> bool:
+        try:
+            self._ensure_entropy_ops_index()
+            con = sqlite3.connect(str(self._entropy_ops_db_path()))
+            try:
+                cutoff = time.time() - max(0, int(cooldown))
+                row = con.execute('SELECT 1 FROM entropy_alert_log WHERE dedup_key = ? AND ts >= ? LIMIT 1', (dedup_key, cutoff)).fetchone()
+                return row is not None
+            finally:
+                con.close()
+        except Exception:
+            return False
+
+    def _record_alert_log(self, dedup_key: str, snap: dict[str, Any]) -> None:
+        try:
+            self._ensure_entropy_ops_index()
+            con = sqlite3.connect(str(self._entropy_ops_db_path()))
+            try:
+                con.execute('INSERT OR IGNORE INTO entropy_alert_log(ts,dedup_key,risk,state,score) VALUES(?,?,?,?,?)', (time.time(), dedup_key, str(snap.get('risk') or ''), str(snap.get('state') or ''), float(snap.get('score') or 0.0)))
+                con.commit()
+            finally:
+                con.close()
+        except Exception:
+            pass
+
+    def _create_proposal_if_needed(self, snap: dict[str, Any]) -> None:
+        risk = str(snap.get('risk') or 'NORMAL')
+        if risk not in {'CRITICAL', 'DEGRADED'}:
+            return
+        state = str(snap.get('state') or '')
+        score = float(snap.get('score') or 0.0)
+        if risk == 'DEGRADED' and score < max(0.6, float(getattr(settings, 'entropy_threshold_degraded', 0.7)) - 0.05):
+            return
+        try:
+            self._ensure_entropy_ops_index()
+            con = sqlite3.connect(str(self._entropy_ops_db_path()))
+            try:
+                open_pending = con.execute('SELECT proposal_id FROM entropy_proposals WHERE status = ? LIMIT 1', ('PENDING',)).fetchone()
+                if open_pending:
+                    return
+                con.execute(
+                    'INSERT INTO entropy_proposals(created_ts,state,risk,score,vector_json,action_hint,status) VALUES(?,?,?,?,?,?,?)',
+                    (time.time(), state, risk, score, json.dumps(snap.get('vector') or {}, ensure_ascii=False), self._action_hint(risk, snap.get('triggered_action') or []), 'PENDING')
+                )
+                con.commit()
+            finally:
+                con.close()
+        except Exception:
+            pass
+
+    def list_proposals(self, status: str = 'PENDING', limit: int = 50) -> list[dict[str, Any]]:
+        self._ensure_entropy_ops_index()
+        con = sqlite3.connect(str(self._entropy_ops_db_path()))
+        con.row_factory = sqlite3.Row
+        try:
+            rows = con.execute('SELECT * FROM entropy_proposals WHERE (? = "all" OR status = ?) ORDER BY proposal_id DESC LIMIT ?', (status.lower(), status.upper(), max(1, int(limit)))).fetchall()
+            out=[]
+            for r in rows:
+                d=dict(r)
+                try:
+                    d['vector']=json.loads(d.get('vector_json') or '{}')
+                except Exception:
+                    d['vector']={}
+                out.append(d)
+            return out
+        finally:
+            con.close()
+
+    def set_proposal_decision(self, proposal_id: int, action: str, actor: str, reason: str | None = None) -> dict[str, Any]:
+        self._ensure_entropy_ops_index()
+        con = sqlite3.connect(str(self._entropy_ops_db_path()))
+        con.row_factory = sqlite3.Row
+        try:
+            row = con.execute('SELECT * FROM entropy_proposals WHERE proposal_id = ?', (int(proposal_id),)).fetchone()
+            if not row:
+                return {'ok': False, 'error': 'PROPOSAL_NOT_FOUND'}
+            status = 'APPROVED' if action == 'approve' else 'REJECTED'
+            con.execute('UPDATE entropy_proposals SET status=?, approved_by=?, approved_ts=?, decision_reason=? WHERE proposal_id=?', (status, actor, time.time(), reason, int(proposal_id)))
+            con.commit()
+            row2 = con.execute('SELECT * FROM entropy_proposals WHERE proposal_id = ?', (int(proposal_id),)).fetchone()
+            return {'ok': True, 'proposal': dict(row2)}
+        finally:
+            con.close()
+
+    def execute_approved_proposal(self, proposal_id: int, actor: str = 'entropy-governor') -> dict[str, Any]:
+        from ..recovery.takeover_lock import build_lock_provider, RedisLockProvider
+        self._ensure_entropy_ops_index()
+        con = sqlite3.connect(str(self._entropy_ops_db_path()))
+        con.row_factory = sqlite3.Row
+        try:
+            row = con.execute('SELECT * FROM entropy_proposals WHERE proposal_id = ?', (int(proposal_id),)).fetchone()
+            if not row:
+                return {'ok': False, 'error': 'PROPOSAL_NOT_FOUND'}
+            if str(row['status']) != 'APPROVED':
+                return {'ok': False, 'error': 'PROPOSAL_NOT_APPROVED'}
+            provider = build_lock_provider()
+            owner = f'entropy-exec:{actor}:{int(time.time())}'
+            handle = provider.acquire(owner, settings.recovery_lock_ttl_s) if isinstance(provider, RedisLockProvider) else provider.acquire(owner)
+            if not handle:
+                return {'ok': False, 'error': 'TAKEOVER_LOCK_FAILED'}
+            try:
+                executed_action = str(row['action_hint'] or 'Entropy stabilization proposal acknowledged')
+                result = {'status': 'executed', 'note': 'manual-governed execution placeholder'}
+                con.execute('UPDATE entropy_proposals SET status=?, executed_action=?, result_json=? WHERE proposal_id=?', ('EXECUTED', executed_action, json.dumps(result, ensure_ascii=False), int(proposal_id)))
+                con.commit()
+                self._append_evidence({'event': 'proposal_execute', 'timestamp': _utcnow().isoformat(), 'proposal_id': int(proposal_id), 'approved_by': row['approved_by'], 'approved_ts': row['approved_ts'], 'executed_action': executed_action, 'result': result})
+                return {'ok': True, 'proposal_id': int(proposal_id), 'executed_action': executed_action, 'result': result}
+            finally:
+                if isinstance(provider, RedisLockProvider):
+                    provider.release(owner)
+                else:
+                    provider.release()
+        finally:
+            con.close()
 
     def _append_evidence(self, payload: dict[str, Any]) -> None:
         out = self._evidence_path()
@@ -383,20 +562,26 @@ class EntropyEngine:
             return
         now = time.time()
         cooldown = max(0, int(getattr(settings, 'entropy_alert_cooldown_s', 300)))
-        if (now - self._last_alert_ts) < cooldown:
+        dedup_key = self._alert_dedup_key(snap, now)
+        if self._alert_dedup_exists(dedup_key, cooldown):
             return
         payload = {
             'score': snap.get('score'),
             'state': snap.get('state'),
             'risk': snap.get('risk'),
             'vector': snap.get('vector'),
+            'action_hint': self._action_hint(level, snap.get('triggered_action') or []),
+            'recovery_condition': self._recovery_condition(),
+            'runbook_ref': self._runbook_ref(level),
             'last_transition_ts': snap.get('ts'),
             'report_ref': str(self._evidence_path()),
+            'dedup_key': dedup_key,
         }
         try:
             req = Request(url=url, method='POST', data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'})
             with urlopen(req, timeout=3):
                 pass
+            self._record_alert_log(dedup_key, snap)
             self._last_alert_ts = now
         except Exception:
             return
@@ -437,6 +622,7 @@ class EntropyEngine:
                     "risk": base_risk,
                 })
             self._append_evidence(snap)
+            self._create_proposal_if_needed(snap)
             self._send_alert_if_needed(snap)
         self._last_snapshot = snap
         return snap

@@ -132,3 +132,24 @@ python scripts/entropy/rotate_entropy_evidence.py
 - `evidence/entropy_engine.jsonl` 归档到 `evidence/archives/entropy_engine_YYYYMMDD*.jsonl`
 - 计算 sha256 并写入 `evidence/index.json`
 - 超过 30 天归档自动 gzip 压缩（index 记录保留）
+
+
+## Governance proposal flow (manual approve)
+
+默认不自动修复。
+
+当 `CRITICAL`（或高强度 `DEGRADED`）出现时，Entropy Engine 会生成 `PENDING` proposal。
+
+API：
+
+- `GET /v1/entropy/proposals?status=PENDING`
+- `POST /v1/entropy/proposals/{id}/approve`
+- `POST /v1/entropy/proposals/{id}/reject`
+- `POST /v1/entropy/proposals/{id}/execute`
+
+执行前必须获取 takeover lock，执行后会写 `proposal_execute` 审计。
+
+## KPI API contract
+
+- `GET /v1/entropy/kpi?window=24h|7d`
+- 稳定字段：`avg_score`, `p95_score`, `time_in_state`, `transitions_count`, `alert_sent_count`, `slo`
