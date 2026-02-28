@@ -171,6 +171,79 @@ async def ready():
     return JSONResponse(payload, status_code=code)
 
 
+@router.get("/system/monitor", tags=["system"])
+async def system_monitor():
+    import os
+    import platform
+    import tempfile
+    import time
+    import json
+    from pathlib import Path as _Path
+
+    health_payload = await health()
+    ready_payload = collect_readiness()
+    migration_payload = await migration_state()
+    migration_body = migration_payload.body.decode("utf-8") if hasattr(migration_payload, "body") else "{}"
+    try:
+        migration_json = json.loads(migration_body)
+    except Exception:
+        migration_json = {"raw": migration_body}
+
+    hb_path = _Path(settings.recovery_heartbeat_path) if settings.recovery_heartbeat_path else (_Path(tempfile.gettempdir()) / "archillx_heartbeat.json")
+    state_path = _Path(tempfile.gettempdir()) / "archillx_recovery_state.json"
+    handoff_path = _Path(settings.recovery_handoff_path) if settings.recovery_handoff_path else (_Path(tempfile.gettempdir()) / "archillx_handoff.json")
+    lock_meta_path = _Path(tempfile.gettempdir()) / "archillx_recovery.lock.json"
+
+    def _load_json(path: _Path) -> dict:
+        if not path.exists():
+            return {"exists": False, "path": str(path)}
+        try:
+            return {"exists": True, "path": str(path), "payload": json.loads(path.read_text(encoding="utf-8"))}
+        except Exception as e:
+            return {"exists": True, "path": str(path), "error": str(e)}
+
+    hb_data = _load_json(hb_path)
+    age = None
+    if hb_data.get("exists") and isinstance(hb_data.get("payload"), dict):
+        epoch = hb_data["payload"].get("epoch")
+        if isinstance(epoch, (int, float)):
+            age = max(0.0, time.time() - float(epoch))
+
+    telemetry_payload = {
+        "snapshot": telemetry.snapshot(),
+        "aggregate": telemetry.aggregated_snapshot(),
+        "history_size": len(telemetry.history_snapshot() or []),
+    }
+
+    return {
+        "system": "ArcHillx",
+        "version": settings.app_version,
+        "app_env": settings.app_env,
+        "host": {
+            "hostname": platform.node(),
+            "platform": platform.platform(),
+            "python": platform.python_version(),
+            "pid": os.getpid(),
+        },
+        "health": health_payload,
+        "ready": ready_payload,
+        "migration": migration_json,
+        "recovery": {
+            "enabled": settings.recovery_enabled,
+            "mode": settings.recovery_mode,
+            "lock_backend": settings.recovery_lock_backend,
+            "heartbeat_ttl_s": settings.recovery_heartbeat_ttl_s,
+            "heartbeat_age_s": age,
+            "heartbeat": hb_data,
+            "state": _load_json(state_path),
+            "handoff": _load_json(handoff_path),
+            "lock_meta": _load_json(lock_meta_path),
+        },
+        "telemetry": telemetry_payload,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
 @router.get("/metrics", tags=["system"])
 async def metrics():
     from ..config import settings

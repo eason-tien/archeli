@@ -206,6 +206,37 @@ async function loadOverview(){
 }
 
 
+
+let monitorTimer = null;
+
+async function loadMonitor(){
+  const data = await getJSON('/v1/system/monitor');
+  const hbAge = data.recovery?.heartbeat_age_s;
+  const hbAgeText = (typeof hbAge === 'number') ? `${hbAge.toFixed(1)}s` : 'n/a';
+  setCards($('#monitor-cards'), [
+    {label:'System', value:data.system || 'ArcHillx'},
+    {label:'Version', value:data.version || 'unknown'},
+    {label:'Ready', value:data.ready?.status || 'unknown'},
+    {label:'DB', value:data.ready?.checks?.db ? 'ok' : 'fail'},
+    {label:'Skills', value:data.ready?.checks?.skills ? 'ok' : 'fail'},
+    {label:'Recovery mode', value:data.recovery?.mode || 'single'},
+    {label:'Lock backend', value:data.recovery?.lock_backend || 'file'},
+    {label:'Heartbeat age', value:hbAgeText},
+  ]);
+  $('#monitor-json').textContent = fmt(data);
+  $('#monitor-recovery-json').textContent = fmt(data.recovery || {});
+  $('#monitor-host-json').textContent = fmt(data.host || {});
+  $('#monitor-telemetry-json').textContent = fmt(data.telemetry?.aggregate || data.telemetry || {});
+}
+
+function setMonitorAutoRefresh(){
+  if(monitorTimer){ clearInterval(monitorTimer); monitorTimer = null; }
+  const sec = parseInt($('#monitor-refresh-interval')?.value || '0', 10);
+  if(sec > 0){
+    monitorTimer = setInterval(() => { loadMonitor().catch(e=>$('#monitor-json').textContent=e.message); }, sec * 1000);
+  }
+}
+
 async function loadEvolution(){ const [status, summary] = await Promise.all([getJSON('/v1/evolution/status'), getJSON('/v1/evolution/summary')]); setCards($('#evolution-cards'), [{label:'Inspections', value: summary.counts?.inspections ?? 0},{label:'Proposals', value: summary.counts?.proposals ?? 0},{label:'Pending approval', value: summary.pipeline?.pending_approval ?? 0},{label:'Guard pass rate', value: summary.pipeline?.guard_pass_rate ?? 0}]); $('#evolution-summary').textContent = fmt(summary); $('#evolution-latest').textContent = fmt(status); }
 
 async function loadEvolutionExtras(){
@@ -385,11 +416,15 @@ window.addEventListener('DOMContentLoaded', ()=>{
   wireTabs();
   renderOverviewPortalCards();
   loadOverview().catch(e=>$('#ready-json').textContent=e.message);
+  loadMonitor().catch(e=>$('#monitor-json').textContent=e.message);
   loadEvolution().catch(e=>$('#evolution-summary').textContent=e.message);
   loadEvolutionExtras().catch(e=>$('#evolution-links').textContent=e.message);
   loadProposals().catch(e=>$('#proposal-detail').textContent=e.message);
   loadEvidence().catch(e=>$('#evidence-index').textContent=e.message);
   $('#refresh-proposals').onclick=()=>loadProposals();
+  $('#refresh-monitor').onclick=()=>loadMonitor().catch(e=>$('#monitor-json').textContent=e.message);
+  $('#monitor-refresh-interval').onchange=()=>setMonitorAutoRefresh();
+  setMonitorAutoRefresh();
   $('#refresh-gates').onclick=()=>loadOverview().catch(e=>$('#gates-summary').textContent=e.message);
   $('#refresh-ops-shortcuts').onclick=()=>loadOverview().catch(e=>$('#ops-shortcuts').textContent=e.message);
   $('#btn-open-gate-portal').onclick=()=>getJSON('/v1/gates/portal/latest').then(d=>$('#portal-shortcuts').textContent=fmt(d)).catch(e=>$('#portal-shortcuts').textContent=e.message);
