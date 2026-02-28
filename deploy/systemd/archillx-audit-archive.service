@@ -1,0 +1,10 @@
+[Unit]
+Description=ArcHillx audit archive job
+After=network-online.target archillx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/archillx
+EnvironmentFile=/opt/archillx/.env.prod
+ExecStart=/bin/sh -lc './scripts/archive_audit.sh'

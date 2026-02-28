@@ -1,0 +1,34 @@
+# System Delivery Index
+
+## Top-level docs
+- `README.md`
+- `DEPLOYMENT.md`
+- `CHANGELOG.md`
+- `RELEASE_NOTES_v0.44.0.md`
+- `DELIVERY_MANIFEST.md`
+- `FINAL_RELEASE_CHECKLIST.md`
+- `docs/SYSTEM_FINAL_DELIVERY.md`
+
+## Operations and runbooks
+- `docs/OPERATIONS_RUNBOOK.md`
+- `docs/RELEASE_ROLLBACK_RESTORE_RUNBOOK.md`
+- `docs/SANDBOX_HOST_ENABLEMENT.md`
+- `docs/GATE_SUMMARY_DASHBOARD.md`
+
+## Evolution subsystem
+- `docs/EVOLUTION_SUBSYSTEM.md`
+- `docs/EVOLUTION_DELIVERY.md`
+- `docs/EVOLUTION_DELIVERY_MANIFEST.md`
+- `docs/EVOLUTION_GOVERNANCE.md`
+- `docs/EVOLUTION_RUNBOOK.md`
+- `docs/EVOLUTION_DASHBOARD.md`
+- `docs/EVOLUTION_NAVIGATION.md`
+- `docs/EVOLUTION_PORTAL.md`
+- `docs/EVOLUTION_FINAL.md`
+
+## Suggested reading order
+1. `README.md`
+2. `docs/SYSTEM_FINAL_DELIVERY.md`
+3. `DEPLOYMENT.md`
+4. `FINAL_RELEASE_CHECKLIST.md`
+5. `docs/OPERATIONS_RUNBOOK.md`

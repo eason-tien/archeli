@@ -1,0 +1,300 @@
+{
+  "title": "ArcHillx Overview",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Request Rate (5m)",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(archillx_http_requests_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "HTTP 5xx Rate (5m)",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(archillx_http_status_5xx_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Governor Blocked (5m)",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(archillx_governor_decision_blocked_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Sandbox Failed (5m)",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(archillx_sandbox_sandbox_execute_failed_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Auth Failed (5m)",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(archillx_auth_failed_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Rate Limited (5m)",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(archillx_rate_limited_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Request Rate by Status",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(archillx_http_status_2xx_total[5m]))",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(archillx_http_status_4xx_total[5m]))",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(archillx_http_status_5xx_total[5m]))",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Latency Avg (5m)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(archillx_http_request_seconds_sum[5m])) / clamp_min(sum(rate(archillx_http_request_seconds_count[5m])), 1)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Governor Decisions (5m)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(archillx_governor_decision_approved_total[5m]))",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(archillx_governor_decision_warned_total[5m]))",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(increase(archillx_governor_decision_blocked_total[5m]))",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Skill Success vs Failure (5m)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(archillx_skill_invoke_success_total[5m]))",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(archillx_skill_invoke_failure_total[5m]))",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(increase(archillx_skill_validation_error_total[5m]))",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(increase(archillx_skill_access_denied_total[5m]))",
+          "refId": "D"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Cron Success vs Failure (15m)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(archillx_cron_success_total[15m]))",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(archillx_cron_failure_total[15m]))",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(increase(archillx_cron_blocked_total[15m]))",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Sandbox Decisions (15m)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(archillx_sandbox_decision_APPROVED_total[15m]))",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(archillx_sandbox_decision_WARNED_total[15m]))",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(increase(archillx_sandbox_decision_BLOCKED_total[15m]))",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Top Skill Invocations (15m)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "{__name__=~\"archillx_skill_.*_invoke_total\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Top Cron Jobs (1h)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "{__name__=~\"archillx_cron_job_.*_execute_total\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Sandbox Backend Split (1h)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(archillx_sandbox_backend_process_total[1h]))",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(archillx_sandbox_backend_docker_total[1h]))",
+          "refId": "B"
+        }
+      ]
+    }
+  ]
+}

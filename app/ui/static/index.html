@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ArcHillx Console</title>
+  <link rel="stylesheet" href="/ui/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>ArcHillx Console</h1>
+      <p>v75 console — overview, evolution, proposal approval, evidence, gates</p>
+    </div>
+    <nav class="tabs">
+      <button data-tab="overview" class="active">Overview</button>
+      <button data-tab="evolution">Evolution</button>
+      <button data-tab="proposals">Proposals</button>
+      <button data-tab="evidence">Evidence</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="tab-overview" class="tab active">
+      <div class="grid cards" id="overview-cards"></div>
+      <div class="panel">
+        <h2>Integrated system status</h2>
+        <div class="grid cards status-cards" id="system-status-cards"></div>
+        <pre id="system-status-json">Loading…</pre>
+      </div>
+      <div class="grid two">
+        <div class="panel"><h2>System readiness</h2><pre id="ready-json">Loading…</pre></div>
+        <div class="panel"><h2>Telemetry aggregate</h2><pre id="telemetry-json">Loading…</pre></div>
+      </div>
+      <div class="grid two">
+        <div class="panel"><h2>Release / rollback gate summary</h2><div class="toolbar compact"><button id="refresh-gates">Refresh gates</button></div><pre id="gates-summary">Loading…</pre></div>
+        <div class="panel"><h2>Gate latest evidence</h2><pre id="gates-latest">Loading…</pre></div>
+      </div>
+      <div class="grid two">
+        <div class="panel">
+          <h2>Migration / restore drill quick status</h2>
+          <div class="toolbar compact"><button id="refresh-ops-shortcuts">Refresh shortcuts</button></div>
+          <pre id="ops-shortcuts">Loading…</pre>
+        </div>
+        <div class="panel">
+          <h2>Gate / portal quick links</h2>
+          <div class="toolbar compact">
+            <button id="btn-open-gate-portal">Load gate portal</button>
+            <button id="btn-open-gate-portal-preview">Open gate HTML</button>
+            <button id="btn-open-restore-preview">Open restore HTML</button>
+            <button id="btn-open-evolution-portal">Load evolution portal</button>
+            <button id="btn-open-evolution-portal-preview">Open portal HTML</button>
+            <button id="btn-open-evolution-final">Load evolution final</button>
+            <button id="btn-open-evolution-final-preview">Open final HTML</button>
+            <button id="btn-open-evolution-summary">Load evolution summary</button>
+            <button id="btn-open-evolution-nav">Load evolution nav</button>
+            <button id="btn-open-system-portal">Load system portal hint</button>
+          </div>
+          <div class="portal-card-grid" id="overview-portal-cards"></div>
+          <div class="card timeline-card"><div class="timeline-head"><h3>Recent evidence timeline</h3><div class="toolbar compact"><label>Status <select id="timeline-filter-status"><option value="all">all</option><option value="good">good</option><option value="warn">warn</option><option value="bad">bad</option><option value="unknown">unknown</option></select></label><label>Area <select id="timeline-filter-area"><option value="all">all</option><option value="release">release</option><option value="rollback">rollback</option><option value="restore">restore</option><option value="evolution">evolution</option></select></label><label>Window <select id="timeline-filter-window"><option value="all">all</option><option value="24h">24h</option><option value="7d">7d</option></select></label><button id="timeline-expand-all" class="secondary">Expand all</button><button id="timeline-collapse-all" class="secondary">Collapse all</button></div></div><div class="timeline-summary-cards" id="overview-timeline-summary"></div><div id="overview-evidence-timeline"></div></div>
+          <pre id="portal-shortcuts">Loading…</pre>
+          <div class="hint" id="portal-preview-hint">HTML previews will open in a new tab for gate, restore, evolution portal and evolution final views.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-evolution" class="tab">
+      <div class="grid cards" id="evolution-cards"></div>
+      <div class="grid two">
+        <div class="panel"><h2>Evolution summary</h2><pre id="evolution-summary">Loading…</pre></div>
+        <div class="panel"><h2>Latest objects</h2><pre id="evolution-latest">Loading…</pre></div>
+      </div>
+      <div class="grid two">
+        <div class="panel">
+          <h2>Navigation & portal</h2>
+          <div class="toolbar compact">
+            <button id="btn-open-portal">Load portal</button>
+            <button id="btn-open-nav">Load nav</button>
+            <button id="btn-open-final">Load final</button>
+            <button id="btn-render-dashboard">Render dashboard</button>
+            <button id="btn-render-portal">Render portal</button>
+          </div>
+          <pre id="evolution-links">Loading…</pre>
+        </div>
+        <div class="panel">
+          <h2>Dashboard / final bundle</h2>
+          <div class="toolbar compact">
+            <button id="btn-render-final">Render final</button>
+            <button id="btn-open-dashboard-summary">Load dashboard summary</button>
+          </div>
+          <pre id="evolution-bundles">Loading…</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-proposals" class="tab">
+      <div class="toolbar">
+        <label>Status <input id="proposal-status" placeholder="approved" /></label>
+        <label>Risk <input id="proposal-risk" placeholder="low" /></label>
+        <label>Subject <input id="proposal-subject" placeholder="dashboard" /></label>
+        <button id="refresh-proposals">Refresh</button>
+      </div>
+      <div class="panel">
+        <h2>Proposal list</h2>
+        <table>
+          <thead><tr><th>ID</th><th>Status</th><th>Risk</th><th>Subject</th><th>Title</th></tr></thead>
+          <tbody id="proposal-table"></tbody>
+        </table>
+      </div>
+      <div class="grid two">
+        <div class="panel">
+          <h2>Selected proposal</h2>
+          <pre id="proposal-detail">Select a row</pre>
+        </div>
+        <div class="panel">
+          <h2>Review exports</h2>
+          <div class="toolbar compact">
+            <button id="btn-export-review-all">Export full review</button>
+            <button id="btn-export-review-guard">Export guard</button>
+            <button id="btn-export-review-baseline">Export baseline</button>
+            <button id="btn-export-review-artifacts">Export artifacts</button>
+          </div>
+          <div id="proposal-export-result" class="export-links">Export result will appear here.</div>
+          <h2>Approval actions</h2>
+          <div class="toolbar compact">
+            <label>Actor <input id="proposal-actor" value="operator-ui" /></label>
+            <label>Reason <input id="proposal-reason" placeholder="optional" /></label>
+          </div>
+          <div class="toolbar compact">
+            <button id="btn-approve">Approve</button>
+            <button id="btn-reject" class="secondary">Reject</button>
+            <button id="btn-apply">Apply</button>
+            <button id="btn-rollback" class="secondary">Rollback</button>
+            <button id="btn-render-artifacts">Render artifacts</button>
+          </div>
+          <div class="hint">Selected proposal ID: <strong id="selected-proposal-id">—</strong></div>
+          <pre id="proposal-action-result">No action yet</pre>
+        </div>
+      </div>
+      <div class="grid two proposal-review-grid">
+        <div class="panel review-card">
+          <h2>Integrated review card</h2>
+          <div class="review-meta">
+            <div><strong>Proposal</strong><pre id="proposal-review-summary">Select a proposal to load summary</pre></div>
+            <div><strong>Guard</strong><pre id="proposal-guard-summary">Guard summary will appear here</pre></div>
+            <div><strong>Baseline</strong><pre id="proposal-baseline-summary">Baseline summary will appear here</pre></div>
+          </div>
+          <div class="review-meta two-up">
+            <div><strong>Artifacts</strong><pre id="proposal-artifacts">Select a proposal and render artifacts</pre></div>
+            <div>
+              <strong>Artifacts manifest summary</strong><span class="muted" title="Hover the badges below for manifest details and status explanations."> (hover for details)</span><span class="muted" title="Hover the badges below for manifest details and status explanations."> (hover for details)</span>
+              <div id="proposal-artifact-badges" class="artifact-badges grouped">No manifest loaded</div>
+              <pre id="proposal-artifact-manifest">Select a proposal to view artifact manifest</pre>
+            </div>
+            <div><strong>Recent actions</strong><pre id="proposal-actions">Loading…</pre></div>
+          </div>
+        </div>
+        <div class="panel review-card">
+          <h2>Artifact / PR / rollout review</h2>
+          <div class="review-meta two-up">
+            <div><strong>PR / Commit preview</strong><pre id="proposal-pr-preview">Select a proposal to preview PR title / PR draft / commit message</pre></div>
+            <div><strong>Patch / Tests / Rollout preview</strong><pre id="proposal-patch-preview">Select a proposal to preview patch / tests / rollout notes</pre></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-evidence" class="tab">
+      <div class="toolbar">
+        <button id="refresh-evidence">Refresh evidence index</button>
+      </div>
+      <div class="grid two">
+        <div class="panel"><h2>Evidence index</h2><pre id="evidence-index">Loading…</pre></div>
+        <div class="panel"><h2>Portal / docs</h2><pre id="portal-json">Loading…</pre></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/ui/static/app.js"></script>
+</body>
+</html>

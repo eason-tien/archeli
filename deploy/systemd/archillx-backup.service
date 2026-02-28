@@ -1,0 +1,10 @@
+[Unit]
+Description=ArcHillx backup job
+After=docker.service archillx.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/archillx
+EnvironmentFile=/opt/archillx/.env.prod
+ExecStart=/bin/sh -lc './scripts/backup_stack.sh'

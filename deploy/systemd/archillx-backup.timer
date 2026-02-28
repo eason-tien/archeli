@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ArcHillx backup daily
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+Unit=archillx-backup.service
+
+[Install]
+WantedBy=timers.target

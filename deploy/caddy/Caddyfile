@@ -1,0 +1,13 @@
+# Example only. Replace example.com with your domain and set TLS as needed.
+example.com {
+    encode zstd gzip
+
+    @metrics path /metrics /v1/metrics
+    handle @metrics {
+        @notlocal not remote_ip 127.0.0.1/32 ::1
+        respond @notlocal 403
+        reverse_proxy archillx:8000
+    }
+
+    reverse_proxy archillx:8000
+}
