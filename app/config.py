@@ -214,6 +214,9 @@ class Settings(BaseSettings):
     entropy_ewma_alpha: float = 0.35
     entropy_volatility_window: int = 60
     entropy_tick_min_interval_s: int = 5
+    entropy_ops_sqlite_path: str = "./evidence/entropy_ops.sqlite"
+    entropy_alert_webhook_url: str = ""
+    entropy_alert_cooldown_s: int = 300
 
     # ── Proactive schedule (when enable_proactive=True) ───────────────────────
     daily_driver_cron: str = "30 21 * * *"    # Default 21:30 daily

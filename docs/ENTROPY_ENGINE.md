@@ -101,3 +101,34 @@ python scripts/verify_entropy_engine.py
 - `/v1/system/monitor` 读取的是 `status()` 缓存快照，不做强制重算。
 
 因此 monitor 的 entropy 是“近实时快照”，不是“每次请求都重算”。
+
+
+## Entropy Ops v1.0
+
+### Trend API
+
+- `GET /v1/entropy/trend?window=24h|7d&bucket=5m|1h`
+- 返回 buckets、transition 计数、last_state/last_score。
+
+### Alert webhook (WARN+)
+
+配置：
+
+- `ENTROPY_ALERT_WEBHOOK_URL`
+- `ENTROPY_ALERT_COOLDOWN_S`
+
+在 `WARN/DEGRADED/CRITICAL` 且未命中冷却窗口时发送告警 payload（含 score/state/risk/vector/last_transition_ts/report_ref）。
+
+### Evidence rotation (P0-OPS)
+
+每日归档脚本：
+
+```bash
+python scripts/entropy/rotate_entropy_evidence.py
+```
+
+动作：
+
+- `evidence/entropy_engine.jsonl` 归档到 `evidence/archives/entropy_engine_YYYYMMDD*.jsonl`
+- 计算 sha256 并写入 `evidence/index.json`
+- 超过 30 天归档自动 gzip 压缩（index 记录保留）

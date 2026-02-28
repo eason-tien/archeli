@@ -230,6 +230,28 @@ async function loadMonitor(){
   $('#monitor-host-json').textContent = fmt(data.host || {});
   $('#monitor-telemetry-json').textContent = fmt(data.telemetry?.aggregate || data.telemetry || {});
   $('#monitor-entropy-json').textContent = fmt(data.entropy || {});
+  loadEntropyOps().catch(e=>{
+    const msg = e?.message || String(e);
+    if($('#monitor-entropy-trend-24h')) $('#monitor-entropy-trend-24h').textContent = msg;
+    if($('#monitor-entropy-trend-7d')) $('#monitor-entropy-trend-7d').textContent = msg;
+    if($('#monitor-entropy-transitions')) $('#monitor-entropy-transitions').textContent = msg;
+  });
+}
+
+
+
+async function loadEntropyOps(){
+  const [t24, t7] = await Promise.all([
+    getJSON('/v1/entropy/trend?window=24h&bucket=1h'),
+    getJSON('/v1/entropy/trend?window=7d&bucket=1h'),
+  ]);
+  $('#monitor-entropy-trend-24h').textContent = fmt(t24.buckets || []);
+  const riskDist = {};
+  for(const b of (t7.buckets || [])){
+    for(const [k,v] of Object.entries(b.risk_counts || {})) riskDist[k] = (riskDist[k]||0) + (v||0);
+  }
+  $('#monitor-entropy-trend-7d').textContent = fmt({risk_distribution: riskDist, last_state: t7.last_state, last_score: t7.last_score});
+  $('#monitor-entropy-transitions').textContent = fmt({transitions_24h: t24.transitions, transitions_7d: t7.transitions, last_state: t7.last_state, last_score: t7.last_score});
 }
 
 function setMonitorAutoRefresh(){

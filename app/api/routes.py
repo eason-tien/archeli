@@ -256,6 +256,69 @@ async def entropy_tick():
     return entropy_engine.evaluate(persist=True)
 
 
+@router.get("/entropy/trend", tags=["entropy"])
+async def entropy_trend(window: str = Query("24h", pattern="^(24h|7d)$"), bucket: str = Query("1h", pattern="^(5m|1h)$")):
+    import sqlite3
+    import time
+    from collections import defaultdict
+    from pathlib import Path as _Path
+
+    db_path = _Path(settings.entropy_ops_sqlite_path).resolve()
+    if not db_path.exists():
+        return {"window": window, "bucket": bucket, "buckets": [], "transitions": 0, "last_state": None, "last_score": None}
+
+    now = time.time()
+    span = 24 * 3600 if window == '24h' else 7 * 24 * 3600
+    bsize = 300 if bucket == '5m' else 3600
+    start = now - span
+
+    con = sqlite3.connect(str(db_path))
+    con.row_factory = sqlite3.Row
+    try:
+        rows = con.execute('SELECT ts,state,risk,score,event FROM entropy_events WHERE ts >= ? ORDER BY ts ASC', (start,)).fetchall()
+    finally:
+        con.close()
+
+    bucket_map: dict[int, dict] = {}
+    transitions = 0
+    last_state = None
+    last_score = None
+    for r in rows:
+        ts = float(r['ts'])
+        k = int((ts - start) // bsize)
+        entry = bucket_map.setdefault(k, {'scores': [], 'state_counts': defaultdict(int), 'risk_counts': defaultdict(int)})
+        sc = float(r['score'] or 0.0)
+        entry['scores'].append(sc)
+        entry['state_counts'][str(r['state'] or 'UNKNOWN')] += 1
+        entry['risk_counts'][str(r['risk'] or 'UNKNOWN')] += 1
+        if str(r['event']) == 'state_transition':
+            transitions += 1
+        last_state = str(r['state'] or last_state)
+        last_score = sc
+
+    out = []
+    for k in sorted(bucket_map):
+        b = bucket_map[k]
+        scores = b['scores']
+        t_start = start + k * bsize
+        out.append({
+            't_start': datetime.utcfromtimestamp(t_start).isoformat() + 'Z',
+            'avg_score': round(sum(scores)/len(scores), 4) if scores else 0.0,
+            'max_score': round(max(scores), 4) if scores else 0.0,
+            'state_counts': dict(b['state_counts']),
+            'risk_counts': dict(b['risk_counts']),
+        })
+
+    return {
+        'window': window,
+        'bucket': bucket,
+        'buckets': out,
+        'transitions': transitions,
+        'last_state': last_state,
+        'last_score': last_score,
+    }
+
+
 @router.get("/metrics", tags=["system"])
 async def metrics():
     from ..config import settings

@@ -62,6 +62,13 @@ def main() -> int:
         _settings.entropy_tick_min_interval_s = old_min
         entropy_engine._last_tick_ts = old_last_tick
 
+        trend = client.get('/v1/entropy/trend?window=24h&bucket=1h')
+        tb = trend.json() if trend.status_code == 200 else {}
+        ok_trend = trend.status_code == 200 and 'buckets' in tb and 'transitions' in tb
+        report['checks']['OK_ENTROPY_TREND_API'] = bool(ok_trend)
+        if ok_trend:
+            print('OK_ENTROPY_TREND_API')
+
         m = client.get('/v1/system/monitor')
         mb = m.json() if m.status_code == 200 else {}
         ok_monitor = m.status_code == 200 and isinstance(mb.get('entropy'), dict) and 'score' in mb['entropy']
