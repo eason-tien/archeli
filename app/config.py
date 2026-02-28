@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     app_version: str = _read_app_version()
     app_env: str = "development"
     log_level: str = "INFO"
+    expose_internal_error_details: bool = False
 
     # ── Database ─────────────────────────────────────────────────────────────
     # Note: SQLite is for development only. Production must use mysql/mssql.
@@ -185,6 +186,25 @@ class Settings(BaseSettings):
     enable_telemetry: bool = False
     telemetry_endpoint: str = ""           # Prometheus push gateway or OTLP endpoint
     telemetry_service_name: str = "archillx"
+
+    # ── Recovery / Self-healing ─────────────────────────────────────────────
+    recovery_enabled: bool = False
+    recovery_mode: str = "single"            # single | multi
+    recovery_lock_backend: str = "file"      # file | redis
+    recovery_lock_path: str = ""
+    recovery_lock_key: str = "archillx:recovery:lock"
+    recovery_lock_ttl_s: int = 30
+    recovery_renew_interval_s: int = 10
+    recovery_heartbeat_path: str = ""
+    recovery_handoff_path: str = ""
+    recovery_heartbeat_ttl_s: int = 90
+    recovery_ready_url: str = "http://127.0.0.1:8000/readyz"
+    recovery_check_interval_s: int = 5
+    recovery_ready_fail_threshold: int = 3
+    recovery_once: bool = False
+    recovery_force_takeover: bool = False
+    recovery_offline: bool = False
+    redis_url: str = ""
 
     # ── Proactive schedule (when enable_proactive=True) ───────────────────────
     daily_driver_cron: str = "30 21 * * *"    # Default 21:30 daily
