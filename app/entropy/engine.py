@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import hashlib
 import json
-import math
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -28,6 +28,7 @@ class EntropySnapshot:
     entropy_score: float
     entropy_vector: dict[str, float]
     risk_level: str
+    state: str
     triggered_action: list[str]
     recovery_time: float | None
     governor_override: bool
@@ -38,9 +39,14 @@ class EntropySnapshot:
     def to_dict(self) -> dict[str, Any]:
         return {
             "timestamp": self.timestamp,
+            "ts": self.timestamp,
             "entropy_score": self.entropy_score,
+            "score": self.entropy_score,
             "entropy_vector": self.entropy_vector,
+            "vector": self.entropy_vector,
             "risk_level": self.risk_level,
+            "risk": self.risk_level,
+            "state": self.state,
             "triggered_action": self.triggered_action,
             "recovery_time": self.recovery_time,
             "governor_override": self.governor_override,
@@ -57,18 +63,34 @@ class EntropyEngine:
     """Entropy Engine v1.0 (static weights + EWMA + rule actuator)."""
 
     def __init__(self) -> None:
-        self.weights = {
-            "memory": 0.20,
-            "task": 0.20,
-            "model": 0.20,
-            "resource": 0.20,
-            "decision": 0.20,
-        }
+        self.weights = self._load_weights()
         self._current_state = "NORMAL"
         self._ewma: float | None = None
-        self._score_window: deque[float] = deque(maxlen=60)
+        self._score_window: deque[float] = deque(maxlen=max(10, int(settings.entropy_volatility_window)))
         self._last_recovery_start_ts: float | None = None
         self._last_snapshot: dict[str, Any] | None = None
+        self._last_tick_ts: float = 0.0
+
+    def _load_weights(self) -> dict[str, float]:
+        defaults = {"memory": 0.2, "task": 0.2, "model": 0.2, "resource": 0.2, "decision": 0.2}
+        raw = str(getattr(settings, "entropy_weights", "") or "").strip()
+        if not raw:
+            return defaults
+        parsed = dict(defaults)
+        try:
+            for seg in raw.split(","):
+                if "=" not in seg:
+                    continue
+                k, v = seg.split("=", 1)
+                key = k.strip().lower()
+                if key in parsed:
+                    parsed[key] = max(0.0, float(v.strip()))
+            total = sum(parsed.values())
+            if total > 0:
+                parsed = {k: round(v / total, 6) for k, v in parsed.items()}
+            return parsed
+        except Exception:
+            return defaults
 
     def _evidence_path(self) -> Path:
         p = Path(settings.evidence_dir).resolve()
@@ -82,7 +104,8 @@ class EntropyEngine:
 
     def _collect_memory_entropy(self) -> float:
         try:
-            from ..db.schema import SessionLocal, AHMemory
+            from ..db.schema import AHMemory, SessionLocal
+
             db = SessionLocal()
             try:
                 rows = db.query(AHMemory).order_by(AHMemory.created_at.desc()).limit(200).all()
@@ -101,7 +124,8 @@ class EntropyEngine:
 
     def _collect_task_entropy(self) -> float:
         try:
-            from ..db.schema import SessionLocal, AHTask
+            from ..db.schema import AHTask, SessionLocal
+
             db = SessionLocal()
             try:
                 rows = db.query(AHTask).order_by(AHTask.created_at.desc()).limit(300).all()
@@ -130,7 +154,8 @@ class EntropyEngine:
             total = blocked + warned + approved
             fallback_ratio = (blocked + warned) / total if total > 0 else 0.0
 
-            from ..db.schema import SessionLocal, AHTask
+            from ..db.schema import AHTask, SessionLocal
+
             db = SessionLocal()
             try:
                 rows = db.query(AHTask).order_by(AHTask.created_at.desc()).limit(150).all()
@@ -162,7 +187,8 @@ class EntropyEngine:
 
     def _collect_decision_entropy(self) -> float:
         try:
-            from ..db.schema import SessionLocal, AHAuditLog
+            from ..db.schema import AHAuditLog, SessionLocal
+
             db = SessionLocal()
             try:
                 rows = db.query(AHAuditLog).order_by(AHAuditLog.created_at.desc()).limit(200).all()
@@ -192,30 +218,30 @@ class EntropyEngine:
         return round(_clamp01(score), 4)
 
     def _predict(self, score: float) -> tuple[float, float, int]:
-        alpha = 0.35
+        alpha = _clamp01(float(getattr(settings, "entropy_ewma_alpha", 0.35))) or 0.35
         self._ewma = score if self._ewma is None else (alpha * score + (1.0 - alpha) * self._ewma)
         self._score_window.append(score)
         vol = pstdev(self._score_window) if len(self._score_window) > 1 else 0.0
-        if self._ewma >= 0.7:
+        if self._ewma >= float(settings.entropy_threshold_degraded):
             window = 300
-        elif self._ewma >= 0.5:
+        elif self._ewma >= float(settings.entropy_threshold_warn):
             window = 600
-        elif self._ewma >= 0.3:
+        elif self._ewma >= float(settings.entropy_threshold_normal):
             window = 1200
         else:
             window = 1800
         return round(float(self._ewma), 4), round(float(vol), 4), int(window)
 
     def _risk_level(self, score: float) -> str:
-        if score < 0.3:
+        if score < float(settings.entropy_threshold_normal):
             return "NORMAL"
-        if score < 0.5:
+        if score < float(settings.entropy_threshold_warn):
             return "WARN"
-        if score < 0.7:
+        if score < float(settings.entropy_threshold_degraded):
             return "DEGRADED"
         return "CRITICAL"
 
-    def _transition_state(self, base: str) -> tuple[str, float | None]:
+    def _transition_state(self, base: str) -> tuple[str, float | None, str]:
         now = time.time()
         recovery_time = None
         prev = self._current_state
@@ -231,7 +257,7 @@ class EntropyEngine:
         else:
             self._current_state = base
 
-        return self._current_state, recovery_time
+        return self._current_state, recovery_time, prev
 
     def _actuator(self, vector: dict[str, float], state: str) -> list[str]:
         if state == "NORMAL":
@@ -251,20 +277,19 @@ class EntropyEngine:
             actions = ["Stability Review"]
         return actions
 
-    def evaluate(self, persist: bool = False) -> dict[str, Any]:
-        vector = self.collect_vector()
+    def _evaluate_with_vector(self, vector: dict[str, float], persist: bool, governor_override: bool = False) -> dict[str, Any]:
         score = self.calculate_score(vector)
         ewma, vol, forecast_window = self._predict(score)
         base_risk = self._risk_level(score)
-        risk_state, recovery_time = self._transition_state(base_risk)
-        actions = self._actuator(vector, risk_state)
-        governor_override = bool(settings.governor_mode == "hard_block" and risk_state == "CRITICAL")
+        state, recovery_time, prev = self._transition_state(base_risk)
+        actions = self._actuator(vector, state)
 
         snap = EntropySnapshot(
             timestamp=_utcnow().isoformat(),
             entropy_score=score,
             entropy_vector=vector,
-            risk_level=risk_state,
+            risk_level=base_risk,
+            state=state,
             triggered_action=actions,
             recovery_time=recovery_time,
             governor_override=governor_override,
@@ -278,14 +303,45 @@ class EntropyEngine:
         telemetry.gauge("entropy_volatility", vol)
 
         if persist:
+            if prev != state:
+                self._append_evidence({
+                    "event": "state_transition",
+                    "timestamp": snap["timestamp"],
+                    "from": prev,
+                    "to": state,
+                    "score": score,
+                    "risk": base_risk,
+                })
             self._append_evidence(snap)
         self._last_snapshot = snap
         return snap
+
+    def evaluate(self, persist: bool = False) -> dict[str, Any]:
+        min_interval = max(0, int(getattr(settings, "entropy_tick_min_interval_s", 5)))
+        now = time.time()
+        if persist and min_interval > 0 and (now - self._last_tick_ts) < min_interval:
+            if self._last_snapshot is not None:
+                return self._last_snapshot
+        vector = self.collect_vector()
+        out = self._evaluate_with_vector(vector, persist=persist, governor_override=bool(settings.governor_mode == "hard_block" and self._current_state == "CRITICAL"))
+        if persist:
+            self._last_tick_ts = now
+        return out
+
+    def evaluate_from_vector_for_test(self, vector: dict[str, float], persist: bool = True) -> dict[str, Any]:
+        norm = {k: _clamp01(float(vector.get(k, 0.0))) for k in ["memory", "task", "model", "resource", "decision"]}
+        return self._evaluate_with_vector(norm, persist=persist)
 
     def status(self) -> dict[str, Any]:
         if self._last_snapshot is None:
             return self.evaluate(persist=False)
         return self._last_snapshot
+
+    def evidence_sha256(self) -> str | None:
+        p = self._evidence_path()
+        if not p.exists():
+            return None
+        return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
 entropy_engine = EntropyEngine()

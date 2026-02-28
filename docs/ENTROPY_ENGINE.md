@@ -51,3 +51,25 @@ ArcHillx 引入系统级稳定性模块 **Entropy Engine v1.0**，用于持续�
 - `0.3 - 0.5` -> `WARN`
 - `0.5 - 0.7` -> `DEGRADED`
 - `> 0.7` -> `CRITICAL`
+
+
+## Gate (P0)
+
+上线前必须通过：
+
+- `/v1/entropy/status` 包含 `score/vector/risk/state/ts`
+- `/v1/entropy/tick` 触发后 `evidence/entropy_engine.jsonl` 新增记录
+- `/v1/system/monitor` 的 `entropy` 与 `/v1/entropy/status` 一致（时间差 < 2s）
+- 状态机转移会写 `event=state_transition` 审计
+- UI fail-soft：Monitor 页即使 entropy 渲染异常也不影响整页
+
+一键验证：
+
+```bash
+python scripts/verify_entropy_engine.py
+```
+
+会输出 `OK_*` 结果并生成：
+
+- `evidence/reports/ENTROPY_VERIFY_<YYYYMMDD_HHMMSS>.json`
+- 报告内含 `entropy_engine.jsonl` 的 `sha256`

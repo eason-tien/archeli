@@ -241,7 +241,7 @@ async def system_monitor():
             "lock_meta": _load_json(lock_meta_path),
         },
         "telemetry": telemetry_payload,
-        "entropy": entropy_engine.evaluate(persist=False),
+        "entropy": entropy_engine.status(),
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 

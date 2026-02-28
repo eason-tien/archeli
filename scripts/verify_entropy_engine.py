@@ -1,0 +1,74 @@
+from __future__ import annotations
+
+import hashlib
+import sys
+import json
+from datetime import datetime
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.main import app
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def main() -> int:
+    report: dict = {
+        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'checks': {},
+    }
+
+    with TestClient(app) as client:
+        s = client.get('/v1/entropy/status')
+        body = s.json()
+        ok_status = s.status_code == 200 and all(k in body for k in ['score', 'vector', 'risk', 'state', 'ts'])
+        report['checks']['OK_ENTROPY_STATUS'] = bool(ok_status)
+        if ok_status:
+            print('OK_ENTROPY_STATUS')
+
+        evidence = Path('evidence/entropy_engine.jsonl')
+        before = evidence.read_text(encoding='utf-8').count('\n') if evidence.exists() else 0
+        t = client.post('/v1/entropy/tick')
+        after = evidence.read_text(encoding='utf-8').count('\n') if evidence.exists() else 0
+        ok_tick = t.status_code == 200 and after == before + 1
+        report['checks']['OK_ENTROPY_TICK_AUDITED'] = bool(ok_tick)
+        if ok_tick:
+            print('OK_ENTROPY_TICK_AUDITED')
+
+        m = client.get('/v1/system/monitor')
+        mb = m.json() if m.status_code == 200 else {}
+        ok_monitor = m.status_code == 200 and isinstance(mb.get('entropy'), dict) and 'score' in mb['entropy']
+        report['checks']['OK_SYSTEM_MONITOR_INCLUDES_ENTROPY'] = bool(ok_monitor)
+        if ok_monitor:
+            print('OK_SYSTEM_MONITOR_INCLUDES_ENTROPY')
+
+        ui = client.get('/ui')
+        ok_ui = ui.status_code == 200 and 'monitor-entropy-json' in ui.text
+        report['checks']['OK_UI_ENTROPY_RENDERED'] = bool(ok_ui)
+        if ok_ui:
+            print('OK_UI_ENTROPY_RENDERED')
+
+    report['evidence'] = {
+        'path': str(evidence),
+        'exists': evidence.exists(),
+        'sha256': _sha256(evidence) if evidence.exists() else None,
+    }
+
+    out = Path('evidence/reports')
+    out.mkdir(parents=True, exist_ok=True)
+    out_path = out / f"ENTROPY_VERIFY_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+    out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+    print(f'REPORT={out_path}')
+
+    return 0 if all(report['checks'].values()) else 2
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

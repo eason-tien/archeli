@@ -206,6 +206,15 @@ class Settings(BaseSettings):
     recovery_offline: bool = False
     redis_url: str = ""
 
+    # ── Entropy Engine ──────────────────────────────────────────────────────
+    entropy_weights: str = "memory=0.2,task=0.2,model=0.2,resource=0.2,decision=0.2"
+    entropy_threshold_normal: float = 0.30
+    entropy_threshold_warn: float = 0.50
+    entropy_threshold_degraded: float = 0.70
+    entropy_ewma_alpha: float = 0.35
+    entropy_volatility_window: int = 60
+    entropy_tick_min_interval_s: int = 5
+
     # ── Proactive schedule (when enable_proactive=True) ───────────────────────
     daily_driver_cron: str = "30 21 * * *"    # Default 21:30 daily
     sprint_planner_cron: str = "0 18 * * 0"   # Default Sunday 18:00
