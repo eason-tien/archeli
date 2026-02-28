@@ -1,0 +1,10 @@
+[Unit]
+Description=ArcHillx Restore Drill Verification
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/archillx
+Environment=RUN_RESTORE_DRILL=false
+ExecStart=/bin/bash -lc 'LATEST=$(ls -1t /opt/archillx/backups/archillx_backup_*.tar.gz | head -n1); ./scripts/restore_drill.sh "$LATEST"'

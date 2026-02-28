@@ -1,0 +1,10 @@
+/opt/archillx/logs/*.log /opt/archillx/evidence/security_audit.jsonl {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su root root
+}

@@ -1,0 +1,58 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: platform-webhook
+  group_by: [alertname, severity, alert_domain]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 2h
+  routes:
+    - matchers:
+        - alert_domain="security"
+      receiver: security-webhook
+    - matchers:
+        - alert_domain="governance"
+      receiver: governance-webhook
+    - matchers:
+        - alert_domain="release"
+      receiver: release-webhook
+    - matchers:
+        - alert_domain="recovery"
+      receiver: recovery-webhook
+    - matchers:
+        - severity="critical"
+      receiver: critical-webhook
+    - matchers:
+        - severity="warning"
+      receiver: warning-webhook
+
+inhibit_rules:
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: [alertname, alert_domain]
+
+receivers:
+  - name: platform-webhook
+    webhook_configs:
+      - url: http://example.local/alert/platform
+  - name: governance-webhook
+    webhook_configs:
+      - url: http://example.local/alert/governance
+  - name: security-webhook
+    webhook_configs:
+      - url: http://example.local/alert/security
+  - name: release-webhook
+    webhook_configs:
+      - url: http://example.local/alert/release
+  - name: recovery-webhook
+    webhook_configs:
+      - url: http://example.local/alert/recovery
+  - name: warning-webhook
+    webhook_configs:
+      - url: http://example.local/alert/warning
+  - name: critical-webhook
+    webhook_configs:
+      - url: http://example.local/alert/critical

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ArcHillx audit archive hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=archillx-audit-archive.service
+
+[Install]
+WantedBy=timers.target

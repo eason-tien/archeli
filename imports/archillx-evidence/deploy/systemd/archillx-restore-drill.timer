@@ -1,0 +1,10 @@
+[Unit]
+Description=ArcHillx Monthly Restore Drill Timer
+
+[Timer]
+OnCalendar=monthly
+Persistent=true
+Unit=archillx-restore-drill.service
+
+[Install]
+WantedBy=timers.target

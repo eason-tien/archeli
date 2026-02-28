@@ -1,0 +1,40 @@
+groups:
+  - name: archillx-platform
+    rules:
+      - alert: ArchillxHighHttp5xxRate
+        expr: increase(http_status_5xx_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Archillx HTTP 5xx elevated"
+          description: "HTTP 5xx count has exceeded threshold in the last 5 minutes."
+
+      - alert: ArchillxReadyDegraded
+        expr: min_over_time(http_requests_total[5m]) >= 0
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "Use /v1/ready to confirm readiness"
+          description: "This starter rule is a placeholder to pair with readiness checks and runbook actions."
+
+  - name: archillx-governance
+    rules:
+      - alert: ArchillxGovernorBlockedSpike
+        expr: increase(governor_decision_blocked_total[15m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Governor blocked decisions spiked"
+          description: "Governor blocked decisions exceeded threshold over 15 minutes."
+
+      - alert: ArchillxSandboxFailures
+        expr: increase(sandbox_failed_total[15m]) > 3
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sandbox failures detected"
+          description: "Sandbox execution failures exceeded threshold over 15 minutes."

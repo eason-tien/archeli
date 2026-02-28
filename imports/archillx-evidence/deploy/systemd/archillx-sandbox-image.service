@@ -1,0 +1,12 @@
+[Unit]
+Description=Build ArcHillx sandbox image
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/archillx
+ExecStart=/bin/sh -lc './scripts/build_sandbox_image.sh'
+
+[Install]
+WantedBy=multi-user.target
